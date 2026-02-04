@@ -1,0 +1,50 @@
+---
+- name: Provision AWS DocumentDB Cluster and Instances
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  collections:
+    - amazon.aws
+
+  tasks:
+    - name: Create DB Subnet Group
+      ansible.builtin.shell: >
+        aws docdb create-db-subnet-group
+        --db-subnet-group-name {{ docdb.resource_provisioning.cluster_id }}-subnet
+        --db-subnet-group-description "Subnet group for {{ docdb.resource_provisioning.cluster_id }}"
+        --subnet-ids {{ docdb.resource_provisioning.subnet_ids | join(' ') }}
+        --region {{ docdb.resource_provisioning.region }}
+      register: subnet_group
+
+    - name: Create DocumentDB Cluster
+      ansible.builtin.shell: >
+        aws docdb create-db-cluster
+        --db-cluster-identifier {{ docdb.resource_provisioning.cluster_id }}
+        --engine docdb
+        --engine-version {{ docdb.resource_provisioning.engine_version }}
+        --master-username {{ docdb.resource_provisioning.master_username }}
+        --master-user-password {{ docdb.resource_provisioning.master_password }}
+        --port {{ docdb.resource_provisioning.port }}
+        --vpc-security-group-ids {{ docdb.resource_provisioning.security_group_ids | join(' ') }}
+        --db-subnet-group-name {{ docdb.resource_provisioning.cluster_id }}-subnet
+        --tags {{ docdb.resource_provisioning.tags | to_json }}
+        --region {{ docdb.resource_provisioning.region }}
+      register: cluster
+
+    - name: Create DocumentDB Instances
+      ansible.builtin.shell: >
+        aws docdb create-db-instance
+        --db-cluster-identifier {{ docdb.resource_provisioning.cluster_id }}
+        --db-instance-identifier {{ docdb.resource_provisioning.cluster_id }}-inst{{ item }}
+        --db-instance-class {{ docdb.resource_provisioning.instance_class }}
+        --engine docdb
+        --region {{ docdb.resource_provisioning.region }}
+      loop: "{{ range(1, docdb.resource_provisioning.instance_count + 1) | list }}"
+      register: instances
+
+    - name: Show results
+      ansible.builtin.debug:
+        msg:
+          - "Subnet Group: {{ subnet_group.stdout }}"
+          - "Cluster: {{ cluster.stdout }}"
+          - "Instances: {{ instances.results | map(attribute='stdout') | list }}"

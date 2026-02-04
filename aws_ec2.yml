@@ -1,0 +1,38 @@
+---
+- name: Create AWS EC2 Instance
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  collections:
+    - amazon.aws
+
+  tasks:
+        ############################################################
+        # Create EC2 instance
+        ############################################################
+        - name: Create EC2 instance
+          amazon.aws.ec2_instance:
+            region: "{{ ec2.region }}"
+            image_id: "{{ ec2.ami_id }}"
+            instance_type: "{{ ec2.instance_type }}"
+            key_name: "{{ ec2.key_pair }}"
+            wait: true
+            state: present
+
+            network_interfaces:
+              - subnet_id: "{{ ec2.subnet_id }}"
+                assign_public_ip: true
+                groups:
+                  - "{{ ec2.security_group }}"
+
+            tags:
+              Name: "{{ ec2.name }}"
+              ManagedBy: "AAP"
+              CSP: "AWS"
+
+          register: ec2_result
+          environment:
+            AWS_ACCESS_KEY_ID: "{{ aws_auth.aws_access_key }}"
+            AWS_SECRET_ACCESS_KEY: "{{ aws_auth.aws_secret_key }}"
+            AWS_DEFAULT_REGION: "{{ ec2.region }}"
+          no_log: true

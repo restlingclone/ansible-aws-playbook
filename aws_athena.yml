@@ -1,0 +1,70 @@
+---
+- name: AWS Athena
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  collections:
+    - amazon.aws
+
+  tasks:
+
+        ############################################################
+        # Input validation
+        ############################################################
+        - name: Validate Athena inputs
+          ansible.builtin.assert:
+            that:
+              - item.region is defined
+              - item.athena_bucket is defined
+              - item.athena_bucket | length >= 3
+              - item.database_name is defined
+              - item.table_name is defined
+            fail_msg: "Invalid Athena input: missing or null values"
+          loop: "{{ resource_provisioning }}"
+
+        ############################################################
+        # S3 – idempotent resource creation
+        ############################################################
+        - name: Ensure Athena results bucket exists
+          amazon.aws.s3_bucket:
+            name: "{{ item.athena_bucket }}"
+            region: "{{ item.region }}"
+            state: present
+          loop: "{{ resource_provisioning }}"
+          environment:
+            AWS_ACCESS_KEY_ID: "{{ aws_auth.aws_access_key }}"
+            AWS_SECRET_ACCESS_KEY: "{{ aws_auth.aws_secret_key }}"
+            AWS_DEFAULT_REGION: "{{ item.region }}"
+
+        ############################################################
+        # Athena – SQL execution via AWS CLI
+        ############################################################
+        - name: Create Athena database
+          ansible.builtin.shell: |
+            aws athena start-query-execution --query-string "CREATE DATABASE IF NOT EXISTS {{ item.database_name }};"            --result-configuration OutputLocation=s3://{{ item.athena_bucket }}/results/ --region {{ item.region }}
+          loop: "{{ resource_provisioning }}"
+          environment:
+            AWS_ACCESS_KEY_ID: "{{ aws_auth.aws_access_key }}"
+            AWS_SECRET_ACCESS_KEY: "{{ aws_auth.aws_secret_key }}"
+            AWS_DEFAULT_REGION: "{{ item.region }}"
+          changed_when: false
+
+        - name: Create Athena table
+          ansible.builtin.shell: |
+            aws athena start-query-execution \
+              --query-string "CREATE EXTERNAL TABLE IF NOT EXISTS {{ item.database_name }}.dasda_logs (
+                id string
+              )
+              ROW FORMAT DELIMITED
+              FIELDS TERMINATED BY ','
+              STORED AS TEXTFILE
+              LOCATION 's3://{{ item.athena_bucket }}/data/';" \
+              --result-configuration OutputLocation=s3://{{ item.athena_bucket }}/results/ \
+              --region {{ item.region }}
+          loop: "{{ resource_provisioning }}"
+          environment:
+            AWS_ACCESS_KEY_ID: "{{ aws_auth.aws_access_key }}"
+            AWS_SECRET_ACCESS_KEY: "{{ aws_auth.aws_secret_key }}"
+            AWS_DEFAULT_REGION: "{{ item.region }}"
+          changed_when: false

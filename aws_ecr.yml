@@ -1,0 +1,21 @@
+---
+- name: Create AWS ECR Repository
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  collections:
+    - amazon.aws
+    - community.aws
+  tasks:
+        - name: Create ECR repository
+          community.aws.ecs_ecr:
+            name: "{{ ecr.name }}"
+            region: "{{ ecr.region }}"
+            scan_on_push: "{{ ecr.image_scan_on_push | default(false) }}"
+            image_tag_mutability: "{{ ecr.image_tag_mutability | default('mutable') }}"
+            state: present
+          register: ecr_result
+          environment:
+            AWS_ACCESS_KEY_ID: "{{ aws_auth.aws_access_key }}"
+            AWS_SECRET_ACCESS_KEY: "{{ aws_auth.aws_secret_key }}"
+            AWS_DEFAULT_REGION: "{{ ecr.region }}"
